@@ -51,19 +51,29 @@ jobs:
           chmod +x tools/fetch-and-transcode.sh
           ./tools/fetch-and-transcode.sh
 
-      - name: 补齐可选美术（上游仓库没提交这两张图，没有就用图标顶替）
+      - name: 补齐未随仓库分发的素材（立绘 + 点击音效）
         run: |
+          set -e
           D=app/src/main/res/drawable
-          ls -l "$D" | head
           if [ ! -f "$D/whale_cutout.png" ]; then
-            echo "缺 whale_cutout.png，用 ic_launcher.png 顶替"
-            cp "$D/ic_launcher.png" "$D/whale_cutout.png"
+            echo "缺 whale_cutout.png，用图标顶替"; cp "$D/ic_launcher.png" "$D/whale_cutout.png"
           fi
           if [ ! -f "$D/whale_selfie.png" ]; then
-            echo "缺 whale_selfie.png，用 ic_launcher.png 顶替"
-            cp "$D/ic_launcher.png" "$D/whale_selfie.png"
+            echo "缺 whale_selfie.png，用图标顶替"; cp "$D/ic_launcher.png" "$D/whale_selfie.png"
           fi
-          ls -l "$D"
+          R=app/src/main/res/raw
+          mkdir -p "$R"
+          if [ ! -f "$R/tap_press.mp3" ]; then
+            echo "合成分按下音效"
+            ffmpeg -hide_banner -loglevel error -y -f lavfi -i "sine=frequency=660:duration=0.05" \
+              -af "volume=0.35,afade=t=out:st=0.02:d=0.03" -ar 44100 "$R/tap_press.mp3"
+          fi
+          if [ ! -f "$R/tap_release.mp3" ]; then
+            echo "合成分抬起音效"
+            ffmpeg -hide_banner -loglevel error -y -f lavfi -i "sine=frequency=990:duration=0.04" \
+              -af "volume=0.3,afade=t=out:st=0.015:d=0.025" -ar 44100 "$R/tap_release.mp3"
+          fi
+          ls -l "$R" ; ls -l "$D" | grep whale || true
 
       - name: 构建 APK
         run: |
