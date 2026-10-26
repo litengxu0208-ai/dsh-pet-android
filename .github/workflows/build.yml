@@ -26,8 +26,16 @@ jobs:
         with:
           node-version: '22'
 
-      - name: 安装 ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: 准备 ffmpeg（runner 自带则直接跳过 apt）
+        run: |
+          if command -v ffmpeg >/dev/null 2>&1; then
+            echo "runner 已自带 ffmpeg：$(ffmpeg -version | head -n1)"
+          else
+            echo "未自带，开始安装（限时 5 分钟，防止 apt 源卡死）"
+            timeout 300 sudo apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=20
+            timeout 300 sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          ffmpeg -version | head -n1
 
       # runner 自带 Android SDK，不再用 setup-android（新版镜像上它会因找不到 tools 包而失败）
       - name: 准备 Android SDK
