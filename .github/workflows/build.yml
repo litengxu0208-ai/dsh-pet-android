@@ -51,6 +51,20 @@ jobs:
           chmod +x tools/fetch-and-transcode.sh
           ./tools/fetch-and-transcode.sh
 
+      - name: 补齐可选美术（上游仓库没提交这两张图，没有就用图标顶替）
+        run: |
+          D=app/src/main/res/drawable
+          ls -l "$D" | head
+          if [ ! -f "$D/whale_cutout.png" ]; then
+            echo "缺 whale_cutout.png，用 ic_launcher.png 顶替"
+            cp "$D/ic_launcher.png" "$D/whale_cutout.png"
+          fi
+          if [ ! -f "$D/whale_selfie.png" ]; then
+            echo "缺 whale_selfie.png，用 ic_launcher.png 顶替"
+            cp "$D/ic_launcher.png" "$D/whale_selfie.png"
+          fi
+          ls -l "$D"
+
       - name: 构建 APK
         run: |
           chmod +x gradlew
