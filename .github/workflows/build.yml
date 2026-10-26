@@ -102,6 +102,6 @@ jobs:
           name: 大肥鱼（好感度+喂食）build-${{ github.run_number }}
           body: |
             独立包名 com.dshpet.android.affinity（版本 2.0.0-bond），可与原版大肥鱼桌宠同时安装、各自独立互不影响。
-            含好感度 / 饱食度 / 小鱼干喂食系统；首次启动赠送 3 条小鱼干。
+            含好感度 / 饱食度 / 小鱼干喂食系统。首次启动赠送 3 条小鱼干：屏幕上会飘一条蓝色小鱼，按住它拖到大肥鱼身上就能喂。
           files: app/build/outputs/apk/debug/app-debug.apk
           token: ${{ secrets.GITHUB_TOKEN }}

@@ -21,6 +21,7 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.graphics.drawable.GradientDrawable
@@ -105,6 +106,18 @@ class PetService : Service() {
 
     /** 上次「饿了」的碎碎念时间，避免一直喊饿 */
     private var lastHungryMs = 0L
+
+    // ---- 屏幕上飘的蓝色小鱼（拖到宠物身上喂食）
+    private var feedFishView: FeedFish? = null
+    private var feedFishParams: WindowManager.LayoutParams? = null
+    private var fishDragging = false
+    private var fishDownRawX = 0f
+    private var fishDownRawY = 0f
+    private var fishStartX = 0
+    private var fishStartY = 0
+    private var fishSpawnAt = 0L
+    private var fishDrift = 0f
+    private var fishLastMoveMs = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -336,6 +349,7 @@ class PetService : Service() {
         handler.removeCallbacks(tickRunnable)
         dismissMenu()
         dismissBubble()
+        removeFeedFish()
         val w = wm
         for (h in held) {
             try {
@@ -708,8 +722,8 @@ class PetService : Service() {
             val stock = PetStats.fish(this)
             val label = when {
                 cd > 0L -> "🐟 喂食（${cd}s 后可以再喂）"
-                stock <= 0 -> "🐟 喂食（没有小鱼干了）"
-                else -> "🐟 喂食（小鱼干 $stock 条）"
+                stock <= 0 -> "🐟 喂食（没有小鱼干了，等它游回来）"
+                else -> "🐟 喂食（小鱼干 $stock 条，也可把蓝鱼拖过来）"
             }
             addRow(label) {
                 dismissMenu()
@@ -719,6 +733,8 @@ class PetService : Service() {
                     PetStats.FeedResult.OK -> {
                         sayFrom(if (out.levelUp) "levelup" else "feed", force = true)
                         conf.clicks.randomOrNull()?.let { slug -> pet.playAction(slug) }
+                        removeFeedFish()
+                        fishSpawnAt = SystemClock.uptimeMillis() + 1200L
                     }
                     PetStats.FeedResult.NO_FISH -> sayFrom("nofish", force = true)
                     PetStats.FeedResult.COOLDOWN -> sayFrom("cooldown", force = true)
@@ -772,6 +788,171 @@ class PetService : Service() {
         }
     }
 
+    // ------------------------------------------------------------ 蓝色小鱼（拖拽喂食）
+
+    /** 屏幕上有小鱼干就飘一条蓝色小鱼出来；拖动它到宠物身上即喂食 */
+    private fun ensureFeedFish() {
+        if (feedFishView != null) return
+        if (PetStats.fish(this) <= 0) return
+        val w = wm ?: return
+        if (!Settings.canDrawOverlays(this)) return
+
+        val dm = resources.displayMetrics
+        val d = dm.density
+        val fw = (78 * d).toInt().coerceAtLeast(96)
+        val fh = (48 * d).toInt().coerceAtLeast(60)
+
+        val v = FeedFish(this)
+        v.facingLeft = Random.nextBoolean()
+        v.bob = Random.nextFloat()
+
+        val lp = WindowManager.LayoutParams(
+            fw,
+            fh,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT,
+        )
+        lp.gravity = Gravity.TOP or Gravity.START
+        lp.x = (dm.widthPixels * (0.1 + Random.nextDouble() * 0.6)).toInt()
+            .coerceIn(0, (dm.widthPixels - fw).coerceAtLeast(0))
+        lp.y = (dm.heightPixels * (0.15 + Random.nextDouble() * 0.5)).toInt()
+            .coerceIn(0, (dm.heightPixels - fh).coerceAtLeast(0))
+
+        v.setOnTouchListener { _, e -> onFishTouch(v, e) }
+
+        try {
+            w.addView(v, lp)
+            feedFishView = v
+            feedFishParams = lp
+            fishDragging = false
+            fishDrift = Random.nextFloat() * 6.28f
+            Diag.record(this, "蓝色小鱼已放出（库存 ${PetStats.fish(this)}）")
+        } catch (t: Throwable) {
+            Diag.record(this, "蓝色小鱼创建失败", t)
+        }
+    }
+
+    private fun removeFeedFish() {
+        val v = feedFishView
+        feedFishView = null
+        feedFishParams = null
+        fishDragging = false
+        if (v == null) return
+        try {
+            wm?.removeView(v)
+        } catch (_: Throwable) {
+        }
+    }
+
+    /** 拖动小鱼：按下记录起点，移动跟随手指，抬手判断有没有落在大肥鱼身上 */
+    private fun onFishTouch(v: View, e: MotionEvent): Boolean {
+        val lp = feedFishParams ?: return false
+        val w = wm ?: return false
+        val dm = resources.displayMetrics
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                fishDragging = true
+                fishDownRawX = e.rawX
+                fishDownRawY = e.rawY
+                fishStartX = lp.x
+                fishStartY = lp.y
+            }
+            MotionEvent.ACTION_MOVE -> {
+                lp.x = (fishStartX + (e.rawX - fishDownRawX).toInt())
+                    .coerceIn(0, (dm.widthPixels - lp.width).coerceAtLeast(0))
+                lp.y = (fishStartY + (e.rawY - fishDownRawY).toInt())
+                    .coerceIn(0, (dm.heightPixels - lp.height).coerceAtLeast(0))
+                try {
+                    w.updateViewLayout(v, lp)
+                } catch (_: Throwable) {
+                }
+            }
+            MotionEvent.ACTION_UP -> {
+                fishDragging = false
+                val target = petNear(e.rawX, e.rawY)
+                if (target != null) {
+                    feedByDrag(target)
+                } else {
+                    // 没喂到：换个朝向游走，别停在原地
+                    (v as? FeedFish)?.facingLeft = Random.nextBoolean()
+                }
+            }
+            MotionEvent.ACTION_CANCEL -> fishDragging = false
+        }
+        return true
+    }
+
+    /** 手指落点附近有没有宠物（留 25% 身位的余量，不用点得特别准） */
+    private fun petNear(x: Float, y: Float): Pet? {
+        for (h in held) {
+            val p = h.pet
+            val left = p.windowLeftPx.toFloat()
+            val top = p.y.toFloat()
+            val right = left + p.sizePx
+            val bottom = top + p.heightPx
+            val m = p.sizePx * 0.25f
+            if (x >= left - m && x <= right + m && y >= top - m && y <= bottom + m) return p
+        }
+        return null
+    }
+
+    /** 小鱼被丢到宠物身上：走和菜单喂食同一套数值逻辑 */
+    private fun feedByDrag(pet: Pet) {
+        lastInteractMs = SystemClock.uptimeMillis()
+        val out = try {
+            PetStats.feed(this)
+        } catch (t: Throwable) {
+            Diag.record(this, "拖拽喂食失败", t)
+            return
+        }
+        when (out.result) {
+            PetStats.FeedResult.OK -> {
+                sayFrom(if (out.levelUp) "levelup" else "feed", force = true)
+                cfg?.clicks?.randomOrNull()?.let { slug -> pet.playAction(slug) }
+                removeFeedFish()
+                fishSpawnAt = SystemClock.uptimeMillis() + 1200L
+            }
+            PetStats.FeedResult.COOLDOWN -> sayFrom("cooldown", force = true)
+            PetStats.FeedResult.NO_FISH -> {
+                sayFrom("nofish", force = true)
+                removeFeedFish()
+                fishSpawnAt = SystemClock.uptimeMillis() + 30_000L
+            }
+        }
+    }
+
+    /** 缓慢漂移 + 自动补位（喂掉一条后如果还有库存，过一会儿再飘出来） */
+    private fun tickFeedFish(now: Long) {
+        if (PetStats.fish(this) <= 0) {
+            if (feedFishView != null) removeFeedFish()
+            return
+        }
+        if (feedFishView == null) {
+            if (now >= fishSpawnAt) ensureFeedFish()
+            return
+        }
+        val v = feedFishView ?: return
+        val lp = feedFishParams ?: return
+        if (fishDragging) return
+        if (now - fishLastMoveMs < 80L) return
+        fishLastMoveMs = now
+
+        fishDrift += 0.07f
+        val dx = (Math.cos(fishDrift.toDouble()) * 1.6).toInt()
+        val dy = (Math.sin(fishDrift.toDouble() * 1.7) * 1.1).toInt()
+        val dm = resources.displayMetrics
+        lp.x = (lp.x + dx).coerceIn(0, (dm.widthPixels - lp.width).coerceAtLeast(0))
+        lp.y = (lp.y + dy).coerceIn(0, (dm.heightPixels - lp.height).coerceAtLeast(0))
+        v.bob = (Math.sin(fishDrift.toDouble() * 2.0) * 0.5 + 0.5).toFloat()
+        v.invalidate()
+        try {
+            wm?.updateViewLayout(v, lp)
+        } catch (_: Throwable) {
+        }
+    }
+
     // ------------------------------------------------------------ 帧循环
 
     private val tickRunnable = object : Runnable {
@@ -790,6 +971,11 @@ class PetService : Service() {
                 Diag.record(this@PetService, "followBubble 异常", t)
             }
             val n = SystemClock.uptimeMillis()
+            try {
+                tickFeedFish(n)
+            } catch (t: Throwable) {
+                Diag.record(this@PetService, "tickFeedFish 异常", t)
+            }
             if (n - lastSpeechCheck > 1000L) {
                 lastSpeechCheck = n
                 try {

@@ -11,6 +11,7 @@
 | 九级等级 | 幼鲸 → 伙伴 → 挚友 → 深海羁绊 → 心有灵犀 → 传说羁绊 → 神话羁绊 → 永恒之契 → 鲸生共渡 |
 | 小鱼干 | 上限 20，初始 3 条，每 30 分钟自动回 1 条 |
 | 喂食 | 长按宠物 → 菜单第一项「🐟 喂食」，消耗 1 条，+5 好感、+25 饱食度，30 秒冷却 |
+| 蓝色小鱼 | 屏幕上有小鱼干时，会飘一条**蓝色小鱼**（纯 Canvas 绘制，无图片依赖）；按住它拖到大肥鱼身上即喂食，吃到后鱼消失、约 1.2 秒后再飘一条 |
 | 饱食度 | 上限 100，初始 80，每 10 分钟掉 1 点 |
 | 饿了会叫 | 饱食度 ≤30 时主动碎碎念，最多每 5 分钟一次 |
 | 升级提示 | 无论摸头还是喂食触发升级，都会立刻说一句升级台词 |
@@ -24,6 +25,7 @@
 
 ```
 新增  app/src/main/java/com/dshpet/android/PetStats.kt     全部数值逻辑
+新增  app/src/main/java/com/dshpet/android/FeedFish.kt     蓝色小鱼的绘制
 新增  .github/workflows/build.yml                          GitHub 云端构建
 改    app/src/main/java/com/dshpet/android/PetService.kt   摸头加好感 / 菜单喂食 / 饿与衰减
 改    app/src/main/java/com/dshpet/android/MainActivity.kt 设置页状态显示
