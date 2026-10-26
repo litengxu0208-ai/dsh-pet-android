@@ -116,6 +116,24 @@ object PetStats {
         return (LEVELS[idx + 1].second - v).coerceAtLeast(0)
     }
 
+    /**
+     * 当前等级内的填充进度 0..1。
+     * 爱心就是按这个值从下往上填满的：填满一次 = 升一级 = 多一颗小爱心。
+     */
+    fun levelProgress(ctx: Context): Float = progressOf(affinity(ctx))
+
+    private fun progressOf(v: Int): Float {
+        val idx = levelIndexOf(v)
+        if (idx >= LEVELS.size - 1) return 1f
+        val from = LEVELS[idx].second
+        val to = LEVELS[idx + 1].second
+        if (to <= from) return 1f
+        return ((v - from).toFloat() / (to - from).toFloat()).coerceIn(0f, 1f)
+    }
+
+    /** 已填满的阶段数 = 应显示的小爱心颗数 */
+    fun heartCount(ctx: Context): Int = levelIndex(ctx)
+
     /** 喂食剩余冷却（秒），0 表示可以喂 */
     fun feedCooldownLeftSec(ctx: Context): Long {
         val last = sp(ctx).getLong(K_LAST_FEED, 0L)

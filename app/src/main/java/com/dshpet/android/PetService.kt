@@ -119,6 +119,13 @@ class PetService : Service() {
     private var fishDrift = 0f
     private var fishLastMoveMs = 0L
 
+    // ---- 好感度爱心（点一下宠物，身边浮出一颗会填满的心）
+    private var heartView: AffinityHeart? = null
+    private var heartParams: WindowManager.LayoutParams? = null
+    private var heartPet: Pet? = null
+    private var heartUntilMs = 0L
+    private var heartLastMoveMs = 0L
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -350,6 +357,7 @@ class PetService : Service() {
         dismissMenu()
         dismissBubble()
         removeFeedFish()
+        removeHeart()
         val w = wm
         for (h in held) {
             try {
@@ -529,6 +537,12 @@ class PetService : Service() {
         tapCount++
         // 摸头加好感（10 秒冷却，冷却期间静默不加）
         val tapResult = PetStats.pat(this)
+        // 点一下就在它身边浮出一颗会填满的爱心
+        try {
+            showHeart(pet)
+        } catch (t: Throwable) {
+            Diag.record(this, "爱心显示失败", t)
+        }
         // 连点 5 下：说一句「被戳烦了」
         if (tapCount >= 5) {
             tapCount = 0
@@ -953,6 +967,106 @@ class PetService : Service() {
         }
     }
 
+    // ------------------------------------------------------------ 好感度爱心
+
+    /** 把爱心窗摆到宠物身上（心比宠物大一圈，所以居中） */
+    private fun placeHeart(lp: WindowManager.LayoutParams, size: Int, pet: Pet) {
+        val dm = resources.displayMetrics
+        val offsetY = (pet.heightPx * 0.10f).toInt()
+        val x = pet.windowLeftPx + pet.sizePx / 2 - size / 2
+        val y = pet.y.toInt() + pet.heightPx / 2 - size / 2 - offsetY
+        lp.x = x.coerceIn((-size * 0.15f).toInt(), dm.widthPixels)
+        lp.y = y.coerceIn(0, (dm.heightPixels - (size * 0.4f).toInt()).coerceAtLeast(0))
+    }
+
+    /** 点一下就浮出一颗爱心；已经存在就刷新目标进度并延长显示时间 */
+    private fun showHeart(pet: Pet) {
+        val w = wm ?: return
+        val d = resources.displayMetrics.density
+        val v = heartView
+
+        if (v == null) {
+            val size = (pet.sizePx * 1.45f).toInt().coerceAtLeast((140 * d).toInt())
+            val nv = AffinityHeart(this)
+            // 从空的开始长：第一次点能看到它慢慢填上去
+            nv.shown = 0f
+            nv.target = PetStats.levelProgress(this)
+            nv.hearts = PetStats.heartCount(this)
+
+            val lp = WindowManager.LayoutParams(
+                size,
+                size,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT,
+            )
+            lp.gravity = Gravity.TOP or Gravity.START
+            placeHeart(lp, size, pet)
+            try {
+                w.addView(nv, lp)
+                heartView = nv
+                heartParams = lp
+                heartPet = pet
+                heartUntilMs = SystemClock.uptimeMillis() + 3200L
+                Diag.record(this, "好感度爱心已显示（${PetStats.affinity(this)}）")
+            } catch (t: Throwable) {
+                Diag.record(this, "好感度爱心创建失败", t)
+            }
+            return
+        }
+
+        heartPet = pet
+        heartUntilMs = SystemClock.uptimeMillis() + 3200L
+        val view: AffinityHeart = v
+        val before = view.hearts
+        view.target = PetStats.levelProgress(this)
+        view.hearts = PetStats.heartCount(this)
+        if (view.hearts > before) view.popOnce()
+        val lp = heartParams
+        if (lp != null) {
+            placeHeart(lp, lp.width, pet)
+            try {
+                w.updateViewLayout(view, lp)
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    private fun removeHeart() {
+        val v = heartView
+        heartView = null
+        heartParams = null
+        heartPet = null
+        if (v == null) return
+        try {
+            wm?.removeView(v)
+        } catch (_: Throwable) {
+        }
+    }
+
+    /** 心跳动画 + 跟着宠物走 + 到点自动消失 */
+    private fun tickHeart(now: Long) {
+        val v = heartView ?: return
+        val lp = heartParams ?: return
+        val moving = v.advance()
+        if (moving) v.invalidate()
+
+        if (now - heartLastMoveMs >= 60L) {
+            heartLastMoveMs = now
+            val pet = heartPet
+            if (pet != null) {
+                placeHeart(lp, lp.width, pet)
+                try {
+                    wm?.updateViewLayout(v, lp)
+                } catch (_: Throwable) {
+                }
+            }
+        }
+        if (now > heartUntilMs) removeHeart()
+    }
+
     // ------------------------------------------------------------ 帧循环
 
     private val tickRunnable = object : Runnable {
@@ -975,6 +1089,11 @@ class PetService : Service() {
                 tickFeedFish(n)
             } catch (t: Throwable) {
                 Diag.record(this@PetService, "tickFeedFish 异常", t)
+            }
+            try {
+                tickHeart(n)
+            } catch (t: Throwable) {
+                Diag.record(this@PetService, "tickHeart 异常", t)
             }
             if (n - lastSpeechCheck > 1000L) {
                 lastSpeechCheck = n

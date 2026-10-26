@@ -12,6 +12,7 @@
 | 小鱼干 | 上限 20，初始 3 条，每 30 分钟自动回 1 条 |
 | 喂食 | 长按宠物 → 菜单第一项「🐟 喂食」，消耗 1 条，+5 好感、+25 饱食度，30 秒冷却 |
 | 蓝色小鱼 | 屏幕上有小鱼干时，会飘一条**蓝色小鱼**（纯 Canvas 绘制，无图片依赖）；按住它拖到大肥鱼身上即喂食，吃到后鱼消失、约 1.2 秒后再飘一条 |
+| 好感度爱心 | **点一下大肥鱼**，它身边浮出一颗爱心，从下往上按当前等级进度逐渐填满；每填满一次（升一级）底部就多一颗小爱心，最多 9 颗，3 秒后自动消失 |
 | 饱食度 | 上限 100，初始 80，每 10 分钟掉 1 点 |
 | 饿了会叫 | 饱食度 ≤30 时主动碎碎念，最多每 5 分钟一次 |
 | 升级提示 | 无论摸头还是喂食触发升级，都会立刻说一句升级台词 |
@@ -26,6 +27,7 @@
 ```
 新增  app/src/main/java/com/dshpet/android/PetStats.kt     全部数值逻辑
 新增  app/src/main/java/com/dshpet/android/FeedFish.kt     蓝色小鱼的绘制
+新增  app/src/main/java/com/dshpet/android/AffinityHeart.kt 好感度爱心与填充动画
 新增  .github/workflows/build.yml                          GitHub 云端构建
 改    app/src/main/java/com/dshpet/android/PetService.kt   摸头加好感 / 菜单喂食 / 饿与衰减
 改    app/src/main/java/com/dshpet/android/MainActivity.kt 设置页状态显示
