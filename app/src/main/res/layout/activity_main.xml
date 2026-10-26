@@ -189,6 +189,16 @@
                         android:textColor="@color/chip_off_text"
                         android:textSize="11sp" />
                 </LinearLayout>
+
+                <!-- 好感度 / 小鱼干 / 饱食度：由 MainActivity.refresh() 填充 -->
+                <TextView
+                    android:id="@+id/petStats"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:lineSpacingExtra="2dp"
+                    android:textColor="#8FB6E8"
+                    android:textSize="12sp" />
             </LinearLayout>
 
             <!-- 主按钮 -->

@@ -33,6 +33,7 @@ class MainActivity : Activity() {
     private lateinit var statusOverlay: TextView
     private lateinit var statusNotif: TextView
     private lateinit var statusRun: TextView
+    private lateinit var petStats: TextView
     private lateinit var sizeLabel: TextView
     private lateinit var seek: SeekBar
     private lateinit var btnSound: TextView
@@ -55,6 +56,7 @@ class MainActivity : Activity() {
         statusOverlay = findViewById(R.id.statusOverlay)
         statusNotif = findViewById(R.id.statusNotif)
         statusRun = findViewById(R.id.statusRun)
+        petStats = findViewById(R.id.petStats)
         sizeLabel = findViewById(R.id.sizeLabel)
         seek = findViewById(R.id.seekSize)
         btnSound = findViewById(R.id.btnSound)
@@ -386,6 +388,17 @@ class MainActivity : Activity() {
         chipToggle(btnEdge, Prefs.edgeHideOn(this))
         chipPets(Prefs.petCount(this))
         chipToggle(btnKeepAlive, Prefs.keepAlive(this))
+
+        // 好感度 / 小鱼干 / 饱食度
+        try {
+            PetStats.tick(this)
+            val snap = PetStats.snapshot(this)
+            val next = PetStats.toNextLevel(this)
+            val tail = if (next > 0) " · 距下一级还差 $next 好感" else " · 已满级"
+            petStats.text = snap.setupLine + tail
+        } catch (t: Throwable) {
+            Diag.record(this, "刷新好感度失败", t)
+        }
     }
 
     /**

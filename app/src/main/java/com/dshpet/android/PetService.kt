@@ -103,6 +103,9 @@ class PetService : Service() {
     private var tapCount = 0
     private var tapWindowMs = 0L
 
+    /** 上次「饿了」的碎碎念时间，避免一直喊饿 */
+    private var lastHungryMs = 0L
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -510,10 +513,14 @@ class PetService : Service() {
             tapCount = 0
         }
         tapCount++
+        // 摸头加好感（10 秒冷却，冷却期间静默不加）
+        val tapResult = PetStats.pat(this)
         // 连点 5 下：说一句「被戳烦了」
         if (tapCount >= 5) {
             tapCount = 0
             sayFrom("tapped")
+        } else if (tapResult.levelUp) {
+            sayFrom("levelup", force = true)
         }
     }
 
@@ -547,6 +554,9 @@ class PetService : Service() {
     private fun tickSpeech(now: Long) {
         if (held.isEmpty()) return
 
+        // 时间推进：小鱼干每 30 分钟回 1 条，饱食度每 10 分钟掉 1 点
+        PetStats.tick(this)
+
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         val period = periodOf(hour)
         if (period != null && period != lastPeriod) {
@@ -558,6 +568,12 @@ class PetService : Service() {
         if (idle > 90_000L && now - lastBubbleMs > 120_000L) {
             // 一小时以上没人理：换成更小声的「busy」嘟囔
             sayFrom(if (idle > 600_000L) "busy" else "idle")
+        }
+
+        // 饿了会主动叫：饱食度见底时最多每 5 分钟喊一次
+        if (PetStats.satiety(this) <= PetStats.HUNGRY_THRESHOLD && now - lastHungryMs > 300_000L) {
+            lastHungryMs = now
+            sayFrom("hungry", force = true)
         }
     }
 
@@ -613,6 +629,16 @@ class PetService : Service() {
                 setTextColor(0xFFEAF1F8.toInt())
                 textSize = 16f
                 setPadding((4 * d).toInt(), 0, (4 * d).toInt(), (8 * d).toInt())
+            },
+        )
+
+        // 好感度摘要：等级 · 好感 · 小鱼干 · 饱食度
+        panel.addView(
+            TextView(this).apply {
+                text = PetStats.snapshot(this@PetService).menuLine
+                setTextColor(0xFF8FB6E8.toInt())
+                textSize = 12f
+                setPadding((4 * d).toInt(), 0, (4 * d).toInt(), (10 * d).toInt())
             },
         )
 
@@ -673,6 +699,30 @@ class PetService : Service() {
                 val opening = body.visibility != View.VISIBLE
                 body.visibility = if (opening) View.VISIBLE else View.GONE
                 head.text = (if (opening) "▾ " else "▸ ") + "$title (${slugs.size})"
+            }
+        }
+
+        // 🐟 喂食：消耗一条小鱼干，+5 好感、+25 饱食度，30 秒冷却
+        run {
+            val cd = PetStats.feedCooldownLeftSec(this)
+            val stock = PetStats.fish(this)
+            val label = when {
+                cd > 0L -> "🐟 喂食（${cd}s 后可以再喂）"
+                stock <= 0 -> "🐟 喂食（没有小鱼干了）"
+                else -> "🐟 喂食（小鱼干 $stock 条）"
+            }
+            addRow(label) {
+                dismissMenu()
+                lastInteractMs = SystemClock.uptimeMillis()
+                val out = PetStats.feed(this)
+                when (out.result) {
+                    PetStats.FeedResult.OK -> {
+                        sayFrom(if (out.levelUp) "levelup" else "feed", force = true)
+                        conf.clicks.randomOrNull()?.let { slug -> pet.playAction(slug) }
+                    }
+                    PetStats.FeedResult.NO_FISH -> sayFrom("nofish", force = true)
+                    PetStats.FeedResult.COOLDOWN -> sayFrom("cooldown", force = true)
+                }
             }
         }
 
