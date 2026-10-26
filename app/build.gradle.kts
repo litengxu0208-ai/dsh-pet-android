@@ -8,11 +8,12 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.dshpet.android"
+        // 与上游 com.dshpet.android 区分开，两个版本可以同时装在一个手机上
+        applicationId = "com.dshpet.android.affinity"
         minSdk = 28
         targetSdk = 34
-        versionCode = 12
-        versionName = "1.8.1"
+        versionCode = 200
+        versionName = "2.0.0-bond"
     }
 
     buildTypes {

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">大肥鱼桌宠</string>
+    <string name="app_name">大肥鱼·羁绊</string>
     <string name="pet_name_default">大肥鱼</string>
-    <string name="subtitle">桌宠 · DeepSeek 二创 · 离线不联网</string>
+    <string name="subtitle">桌宠 · 好感度与喂食版 · 离线不联网</string>
 
     <string name="channel_name">大肥鱼常驻</string>
     <string name="notif_title">大肥鱼在桌面上</string>

@@ -32,6 +32,15 @@
 改    app/src/main/assets/lines.json                       50 句新台词
 ```
 
+## 与原版共存
+
+- 包名：`com.dshpet.android.affinity`（原版是 `com.dshpet.android`）
+- 应用名：`大肥鱼·羁绊`
+- 版本：`2.0.0-bond`（versionCode 200）
+
+因为 applicationId 不同，两个版本可以**同时安装在同一个手机上**，桌面出现两个图标，
+各自有独立的悬浮窗、存档和设置。代价是好感度数据不共享，原版的数据不会带过来。
+
 ## 数值想调的话
 
 全在 `PetStats.kt` 顶部的常量里，改完推上去自动重新构建：
